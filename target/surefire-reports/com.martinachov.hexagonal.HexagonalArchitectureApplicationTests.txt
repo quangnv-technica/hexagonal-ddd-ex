@@ -1,4 +1,0 @@
--------------------------------------------------------------------------------
-Test set: com.martinachov.hexagonal.HexagonalArchitectureApplicationTests
--------------------------------------------------------------------------------
-Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 4.745 s -- in com.martinachov.hexagonal.HexagonalArchitectureApplicationTests
