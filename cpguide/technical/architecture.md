@@ -1,125 +1,255 @@
-# Project Architecture Document
+# Hexagonal Architecture Documentation
 
-**Project Name:** TaskFlow
-**Last Updated:** 2025-09-08
-**Authors:** [Nguyen Viet Quang], [Tran Duc Minh]
+**Project:** Hexagonal DDD Example  
+**Technology:** Spring Boot with Java 17  
+**Last Updated:** 2025-09-08  
+**Architecture Pattern:** Hexagonal Architecture (Ports and Adapters) with Domain-Driven Design
 
 ---
 
 ## 1. Introduction
 
-This document provides a high-level overview of the `TaskFlow` application's architecture. It is intended for developers, system administrators, and stakeholders to understand the system's structure, components, and how they interact. The goal of this architecture is to be scalable, maintainable, and robust.
+This document explains the **Hexagonal Architecture** implementation in this Spring Boot application. Hexagonal Architecture, also known as **Ports and Adapters**, is an architectural pattern that separates the core business logic from external concerns through well-defined interfaces.
 
-## 2. Guiding Principles
+### Why Hexagonal Architecture?
 
-- **Microservices-based:** The system is composed of small, independent services.
-- **Stateless Services:** Services should not store session data or state. State should be managed by a database or cache.
-- **Asynchronous Communication:** Services communicate primarily through a message queue to ensure loose coupling.
-- **API-First:** All service interactions are defined by well-documented APIs.
-- **Fault Tolerance:** The system should be resilient to the failure of individual components.
+- **Business Logic Protection**: Core domain logic is isolated from external frameworks and technologies
+- **Technology Independence**: Easy to change databases, web frameworks, or external services
+- **Enhanced Testability**: Business logic can be tested without external dependencies
+- **Clear Boundaries**: Explicit separation between what the application does vs. how it does it
 
-## 3. High-Level Architecture Diagram
-+----------------+      +----------------+      +----------------+
-|                |      |                |      |                |
-|  User Interface  |----->| API Gateway  |----->|   Microservice A  |
-| (Web/Mobile)   |      |                |      |  (User Service)  |
-|                |      |                |      |                |
-+----------------+      +------+---------+      +----------------+
-|      |
-|      |
-|      v
-|  +----------------+
-|  |   Microservice B |
-|  |  (Task Service)  |
-|  +----------------+
-|
-v
-+----------+
-|  Message |
-|  Queue   |
-+----------+
-|
-v
-+----------+
-|  Worker  |
-+----------+
+## 2. Core Principles
 
-## 4. Architectural Components
+### 2.1 Dependency Inversion
+Dependencies point **inward** toward the domain core:
+```
+Infrastructure Layer → Application Layer → Domain Layer
+```
 
-### 4.1. Core Services
+### 2.2 Ports and Adapters
+- **Ports**: Interfaces that define what the application needs or provides
+- **Adapters**: Concrete implementations of ports that handle technical details
 
-#### **User Service**
-- **Purpose:** Manages user authentication, profiles, and roles.
-- **Technology Stack:**
-    - **Language:** Python
-    - **Framework:** FastAPI
-    - **Database:** PostgreSQL (using SQLAlchemy ORM)
-    - **Authentication:** OAuth2/JWT
-- **Key Endpoints:**
-    - `POST /users/register`
-    - `POST /users/login`
-    - `GET /users/{id}`
+### 2.3 Inside-Out Design
+The architecture is designed from the domain outward, not from the technical infrastructure inward.
 
-#### **Task Service**
-- **Purpose:** Manages the creation, retrieval, and modification of tasks.
-- **Technology Stack:**
-    - **Language:** Node.js
-    - **Framework:** Express.js
-    - **Database:** MongoDB
-- **Key Endpoints:**
-    - `POST /tasks`
-    - `GET /tasks/{id}`
-    - `PUT /tasks/{id}`
+## 3. Architecture Layers
 
-### 4.2. Supporting Infrastructure
+### 3.1 Domain Layer (Center of the Hexagon)
 
-#### **API Gateway**
-- **Purpose:** Single entry point for all client requests. Handles request routing, authentication, and rate limiting.
-- **Technology Stack:** Nginx or Amazon API Gateway.
-- **Integration:** Routes requests to the appropriate microservice based on the URL path.
+The **heart** of the application containing pure business logic.
 
-#### **Message Queue**
-- **Purpose:** Facilitates asynchronous communication between services. Used for events like "task created" or "user updated."
-- **Technology Stack:** RabbitMQ or Redis Streams.
-- **Message Format:** JSON. All messages must adhere to a predefined schema.
+#### Components:
+- **Domain Models**: `Product.java`
+  ```java
+  @Builder
+  public class Product {
+      private Long id;
+      private String name;
+      private String description;
+  }
+  ```
 
-#### **Databases**
-- **PostgreSQL:** Primary relational database for structured data (e.g., user profiles, roles).
-- **MongoDB:** Document database for flexible data (e.g., tasks, comments).
+- **Domain Services**: `ProductService.java`
+  - Implements business use cases
+  - Orchestrates domain objects
+  - Contains business rules
 
-#### **Caching**
-- **Purpose:** Reduces database load and improves performance for frequently accessed data.
-- **Technology Stack:** Redis.
-- **Caching Strategy:**
-    - User session data.
-    - Frequently viewed tasks.
+- **Domain Exceptions**: `ProductNotFoundException.java`
+  - Business-specific exceptions
 
-### 5. Data Flow and Communication
+#### Characteristics:
+- ✅ No external dependencies
+- ✅ Framework-agnostic
+- ✅ Pure business logic
+- ❌ No infrastructure concerns
 
-#### **Synchronous Communication**
-- The API Gateway routes requests directly to the relevant service.
-- Example: `GET /users/{id}` -> API Gateway -> User Service -> PostgreSQL.
+### 3.2 Application Layer (Ports)
 
-#### **Asynchronous Communication**
-- A service publishes an event to the message queue. Other services that are "interested" in that event can consume it.
-- Example: A user creates a new task.
-    1. The Task Service receives the request and creates the task in MongoDB.
-    2. The Task Service publishes a "task.created" event to the message queue.
-    3. A separate Worker service consumes this event and sends a notification to the user.
+Defines the **interface** between the domain and the outside world.
 
-### 6. Deployment and Operations
+#### Input Ports (Primary Ports)
+What the application **can do**:
+- `CreateProductUseCase.java`
+- `GetProductUseCase.java`
 
-- **Containerization:** All services are containerized using Docker.
-- **Orchestration:** Kubernetes is used for container orchestration, scaling, and service discovery.
-- **CI/CD:** GitHub Actions are used for continuous integration and deployment.
-- **Monitoring:** Prometheus and Grafana are used for monitoring service metrics and creating dashboards.
+```java
+public interface CreateProductUseCase {
+    Product createProduct(Product product);
+}
+```
 
-### 7. Future Considerations
+#### Output Ports (Secondary Ports)  
+What the application **needs**:
+- `ProductOutputPort.java`
 
-- **Serverless Functions:** Explore using AWS Lambda or similar for event-driven, short-lived tasks to reduce operational overhead.
-- **Service Mesh:** Consider implementing a service mesh (e.g., Istio) for advanced traffic management and security.
-- **GraphQL API:** Implement a GraphQL API to give clients more flexibility in data retrieval.
+```java
+public interface ProductOutputPort {
+    Product saveProduct(Product product);
+    Optional<Product> getProductById(Long id);
+}
+```
+
+### 3.3 Infrastructure Layer (Adapters)
+
+Handles **technical implementation details**.
+
+#### Primary Adapters (Input)
+Handle incoming requests:
+- **REST Adapter**: `ProductRestAdapter.java`
+  - Exposes HTTP endpoints
+  - Converts REST requests to domain calls
+  - Handles HTTP-specific concerns
+
+```java
+@RestController
+@RequestMapping("/v1")
+public class ProductRestAdapter {
+    
+    @PostMapping("/products")
+    public ResponseEntity<ProductResponse> createProduct(@RequestBody ProductRequest request) {
+        Product product = mapper.map(request, Product.class);
+        product = createProductUseCase.createProduct(product);
+        return ResponseEntity.ok(mapper.map(product, ProductResponse.class));
+    }
+}
+```
+
+#### Secondary Adapters (Output)
+Handle outgoing operations:
+- **Persistence Adapter**: `ProductPersistenceAdapter.java`
+  - Implements `ProductOutputPort`
+  - Handles database operations
+  - Converts between domain and persistence models
+
+```java
+@RequiredArgsConstructor
+public class ProductPersistenceAdapter implements ProductOutputPort {
+    
+    private final ProductRepository productRepository;
+    private final ProductMapper productMapper;
+    
+    @Override
+    public Product saveProduct(Product product) {
+        ProductEntity entity = productMapper.toEntity(product);
+        productRepository.save(entity);
+        return productMapper.toProduct(entity);
+    }
+}
+```
+
+## 4. Data Flow Architecture
+
+### 4.1 Request Flow (Create Product)
+
+```
+1. HTTP Request
+   ↓
+2. ProductRestAdapter (Primary Adapter)
+   ↓ (converts ProductRequest → Product)
+3. CreateProductUseCase (Input Port)
+   ↓
+4. ProductService (Domain Service)
+   ↓
+5. ProductOutputPort (Output Port Interface)
+   ↓
+6. ProductPersistenceAdapter (Secondary Adapter)
+   ↓ (converts Product → ProductEntity)
+7. ProductRepository (JPA Repository)
+   ↓
+8. Database (H2/PostgreSQL)
+```
+
+### 4.2 Response Flow
+The response follows the same path in reverse, with appropriate data transformations at each layer.
+
+## 5. Key Implementation Details
+
+### 5.1 Dependency Injection Configuration
+
+The `BeanConfiguration.java` wires dependencies correctly:
+
+```java
+@Configuration
+public class BeanConfiguration {
+    
+    @Bean
+    public ProductService productService(ProductPersistenceAdapter adapter) {
+        return new ProductService(adapter);  // Domain service gets output port implementation
+    }
+    
+    @Bean
+    public ProductPersistenceAdapter productPersistenceAdapter(
+            ProductRepository repository, 
+            ProductMapper mapper) {
+        return new ProductPersistenceAdapter(repository, mapper);
+    }
+}
+```
+
+### 5.2 Data Transformation
+
+Data is transformed at each layer boundary:
+
+- **REST Layer**: `ProductRequest` ↔ `Product` ↔ `ProductResponse`
+- **Persistence Layer**: `Product` ↔ `ProductEntity`
+
+### 5.3 Error Handling
+
+Domain exceptions (`ProductNotFoundException`) are handled at the adapter level, converted to appropriate HTTP responses.
+
+## 6. Benefits Demonstrated
+
+### 6.1 Technology Independence
+- Can switch from H2 to PostgreSQL by changing configuration
+- Can add GraphQL adapter alongside REST adapter
+- Can replace JPA with MongoDB by implementing new adapter
+
+### 6.2 Testability
+- Domain logic testable without database
+- Adapters testable in isolation
+- Use case testing with mock adapters
+
+### 6.3 Clear Separation of Concerns
+- **Domain**: What the business does
+- **Application**: How use cases are orchestrated  
+- **Infrastructure**: Technical implementation details
+
+## 7. Common Patterns Used
+
+### 7.1 Repository Pattern
+`ProductRepository` abstracts data access details.
+
+### 7.2 Mapper Pattern
+`ProductMapper` handles object transformations between layers.
+
+### 7.3 Use Case Pattern
+Each business capability is represented as a specific use case interface.
+
+### 7.4 Adapter Pattern
+Concrete implementations adapt external technologies to internal interfaces.
+
+## 8. Best Practices Implemented
+
+- ✅ **Single Responsibility**: Each class has one reason to change
+- ✅ **Dependency Inversion**: High-level modules don't depend on low-level modules
+- ✅ **Interface Segregation**: Small, focused interfaces
+- ✅ **Open/Closed**: Open for extension, closed for modification
+
+## 9. Extending the Architecture
+
+### Adding New Features
+1. Create domain model if needed
+2. Define input port (use case interface)
+3. Define output port if new external dependency needed
+4. Implement domain service
+5. Create adapters as needed
+
+### Adding New Technologies
+1. Implement existing output ports with new technology
+2. Create new input adapters for new interaction methods
+3. No changes needed in domain or application layers
 
 ---
 
-*This document is a living artifact and will be updated as the system evolves. For more detailed information on a specific service, refer to its dedicated `README.md` file.*
+*This architecture promotes clean, maintainable, and testable code by keeping business logic pure and dependencies properly managed.*
